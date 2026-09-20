@@ -1,0 +1,67 @@
+# -----------------------------------------------------------------------------
+# .NET
+# -----------------------------------------------------------------------------
+bin/
+obj/
+out/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+*.userprefs
+project.lock.json
+artifacts/
+TestResults/
+coverage*.xml
+coverage*.json
+*.trx
+
+# -----------------------------------------------------------------------------
+# IDE
+# -----------------------------------------------------------------------------
+.vs/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# -----------------------------------------------------------------------------
+# HEMLIGHETER — de här raderna är de viktigaste i filen
+# -----------------------------------------------------------------------------
+# Lokal konfiguration som kan innehålla endpoints eller nycklar.
+appsettings.Local.json
+appsettings.*.Local.json
+secrets.json
+*.env
+.env
+.env.*
+
+# Azure-filer som kan innehålla credentials.
+*.publishsettings
+*.pubxml
+*.azurePubxml
+.azure/
+
+# Certifikat och nycklar — ska aldrig i git, under några omständigheter.
+*.pfx
+*.p12
+*.key
+*.pem
+*.cer
+
+# Bicep-parameterfiler med riktiga värden.
+# Mallarna main.dev.bicepparam och main.prod.bicepparam SKA vara med i git —
+# det är därför de bara innehåller platshållare.
+infra/*.local.bicepparam
+infra/*.secret.bicepparam
+
+# ARM-mallar som az bicep build genererar.
+infra/*.json
+!infra/*.parameters.json
+
+# -----------------------------------------------------------------------------
+# Övrigt
+# -----------------------------------------------------------------------------
+*.log
+tmp/
+temp/
