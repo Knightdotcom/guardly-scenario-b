@@ -1,0 +1,230 @@
+# =============================================================================
+# Guardly AB — CI/CD
+#
+# Flödet: git push till main  →  bygg  →  test  →  image till ACR  →  Container Apps
+#
+# Varje steg är en grind. Faller ett steg stannar pipelinen där och inget
+# deployas — den körande versionen i produktion rörs inte. Det är hela poängen
+# med att ha test före push: en trasig build når aldrig ACR.
+#
+# Hemligheter: inga. Pipelinen loggar in med en service connection
+# (Azure Resource Manager) och appen använder managed identity i drift.
+# Det finns alltså ingen nyckel någonstans i det här flödet.
+# =============================================================================
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    exclude:
+      - '**/*.md'
+      - docs/**
+
+# Pull requests byggs och testas, men deployas inte.
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  # -- Ändra de här tre till era egna värden --------------------------------
+  azureServiceConnection: 'sc-iths-azure'      # namnet på service connection i Azure DevOps
+  resourceGroup: 'rg-iths-delad'               # den befintliga, delade resursgruppen
+  acrName: 'acrguardlyXXXXXX'                  # output 'acrName' från Bicep-deployen
+  containerAppName: 'ca-guardly-api-prod'      # output 'containerAppName' från Bicep-deployen
+  # -------------------------------------------------------------------------
+
+  imageRepository: 'guardly-api'
+  dotnetVersion: '8.0.x'
+  buildConfiguration: 'Release'
+
+  # Bygg-id:t som tagg gör varje image spårbar till exakt en pipelinekörning.
+  # Det är också det som gör rollback möjlig: en gammal tagg finns kvar i ACR.
+  imageTag: '$(Build.BuildId)'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+
+  # ===========================================================================
+  # STEG 1 — Bygg och testa
+  # ===========================================================================
+  - stage: BuildAndTest
+    displayName: 'Bygg och testa'
+    jobs:
+      - job: Build
+        displayName: 'dotnet build + test'
+        steps:
+
+          - task: UseDotNet@2
+            displayName: 'Installera .NET SDK'
+            inputs:
+              packageType: 'sdk'
+              version: '$(dotnetVersion)'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Restore'
+            inputs:
+              command: 'restore'
+              projects: 'Guardly.sln'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Build'
+            inputs:
+              command: 'build'
+              projects: 'Guardly.sln'
+              arguments: '--configuration $(buildConfiguration) --no-restore'
+
+          # Grinden. Ett rött test här och pipelinen går inte vidare.
+          - task: DotNetCoreCLI@2
+            displayName: 'Test'
+            inputs:
+              command: 'test'
+              projects: 'tests/**/*.csproj'
+              arguments: >-
+                --configuration $(buildConfiguration)
+                --no-build
+                --logger trx
+                --collect:"XPlat Code Coverage"
+              publishTestResults: true
+
+          - task: PublishCodeCoverageResults@2
+            displayName: 'Publicera täckningsrapport'
+            condition: succeededOrFailed()
+            inputs:
+              summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.cobertura.xml'
+
+          # Validera att Bicep-mallen går att bygga. Billigt sätt att fånga
+          # syntaxfel innan deploysteget.
+          - task: AzureCLI@2
+            displayName: 'Validera Bicep'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+                az bicep build --file infra/main.bicep --stdout > /dev/null
+                echo "Bicep-mallen är giltig."
+
+  # ===========================================================================
+  # STEG 2 — Bygg image och pusha till ACR
+  # ===========================================================================
+  - stage: Package
+    displayName: 'Bygg image och pusha till ACR'
+    dependsOn: BuildAndTest
+    # Körs bara om BuildAndTest gick igenom OCH vi står på main.
+    condition: >-
+      and(
+        succeeded(),
+        eq(variables['Build.SourceBranch'], 'refs/heads/main')
+      )
+    jobs:
+      - job: DockerBuild
+        displayName: 'docker build + push'
+        steps:
+
+          - task: AzureCLI@2
+            displayName: 'Bygg och pusha image'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+
+                # az acr build bygger imagen i Azure i stället för på agenten.
+                # Fördelen: ingen docker login med lösenord behövs, agenten
+                # slipper ladda upp lagren, och bygget blir oftast snabbare.
+                az acr build \
+                  --registry "$(acrName)" \
+                  --image "$(imageRepository):$(imageTag)" \
+                  --image "$(imageRepository):latest" \
+                  --file Dockerfile \
+                  .
+
+                echo "Image pushad: $(acrName).azurecr.io/$(imageRepository):$(imageTag)"
+
+  # ===========================================================================
+  # STEG 3 — Deploya till Container Apps
+  # ===========================================================================
+  - stage: Deploy
+    displayName: 'Deploya till Container Apps'
+    dependsOn: Package
+    condition: succeeded()
+    jobs:
+      - deployment: DeployProd
+        displayName: 'Ny revision av Container App'
+        # En environment i Azure DevOps ger deployhistorik och möjlighet att
+        # lägga in en manuell godkännandegrind före produktion.
+        environment: 'guardly-prod'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+
+                - task: AzureCLI@2
+                  displayName: 'Uppdatera Container App'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      set -e
+
+                      IMAGE="$(acrName).azurecr.io/$(imageRepository):$(imageTag)"
+                      echo "Deployar $IMAGE"
+
+                      # Skapar en ny revision. Container Apps flyttar trafiken
+                      # till den nya revisionen först när den svarar på sin probe.
+                      az containerapp update \
+                        --name "$(containerAppName)" \
+                        --resource-group "$(resourceGroup)" \
+                        --image "$IMAGE" \
+                        --output table
+
+                      # Spara revisionsnamnet — behövs vid rollback.
+                      REVISION=$(az containerapp revision list \
+                        --name "$(containerAppName)" \
+                        --resource-group "$(resourceGroup)" \
+                        --query "sort_by(@, &properties.createdTime)[-1].name" -o tsv)
+
+                      echo "Ny revision: $REVISION"
+                      echo "##vso[task.setvariable variable=deployedRevision;isOutput=true]$REVISION"
+
+                - task: AzureCLI@2
+                  displayName: 'Röktest mot publik URL'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      set -e
+
+                      FQDN=$(az containerapp show \
+                        --name "$(containerAppName)" \
+                        --resource-group "$(resourceGroup)" \
+                        --query "properties.configuration.ingress.fqdn" -o tsv)
+
+                      URL="https://$FQDN/health"
+                      echo "Testar $URL"
+
+                      # Ge den nya revisionen tid att starta innan vi dömer.
+                      for i in $(seq 1 12); do
+                        CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+                        if [ "$CODE" = "200" ]; then
+                          echo "Health check svarade 200 OK efter $i försök."
+                          echo ""
+                          echo "Live:    https://$FQDN"
+                          echo "Swagger: https://$FQDN/swagger"
+                          exit 0
+                        fi
+                        echo "Försök $i: fick $CODE, väntar 10 s..."
+                        sleep 10
+                      done
+
+                      echo "Health check svarade aldrig 200. Deployen underkänns."
+                      echo "Rulla tillbaka med: docs/ROLLBACK.md"
+                      exit 1
