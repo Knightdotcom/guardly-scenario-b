@@ -11,6 +11,7 @@ Scenario B — .NET Cloud Developer, ITHS Göteborg. Byggt av Can "Knight" Öz.
 | [`RAPPORT.md`](RAPPORT.md) | Kundrapport till Guardly AB |
 | [`REFLEKTION_Can_Oz.md`](REFLEKTION_Can_Oz.md) | Individuell reflektion |
 | [`docs/ROLLBACK.md`](docs/ROLLBACK.md) | Hur man rullar tillbaka en deploy |
+| [`docs/PRESENTATION.md`](docs/PRESENTATION.md) | Talmanus för redovisningen |
 
 ---
 
