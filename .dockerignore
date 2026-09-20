@@ -1,0 +1,26 @@
+# Bygg-artefakter — de ska byggas i containern, inte kopieras in
+**/bin/
+**/obj/
+**/out/
+
+# Verktyg och IDE
+.git/
+.github/
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Dokumentation och infrastruktur behövs inte i imagen
+*.md
+docs/
+infra/
+azure-pipelines.yml
+.gitignore
+
+# Hemligheter ska aldrig in i en image
+*.env
+.env*
+appsettings.Local.json
+secrets.json
