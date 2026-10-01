@@ -20,8 +20,18 @@ using './main.bicep'
 param namePrefix = 'guardly'
 param environment = 'prod'
 
-param visionEndpoint = 'https://REPLACE-ME.cognitiveservices.azure.com/'
+// Kursens Vision-resurs. Den ligger i en annan Entra-tenant, så Managed Identity
+// kan inte få en token för den — nyckeln hämtas från Key Vault i stället.
+// Endpointen är ingen hemlighet; nyckeln finns bara i Key Vault.
+param visionEndpoint = 'https://cloud25ai-cv-9f3b0.cognitiveservices.azure.com/'
 param visionAccountName = ''
+param visionKeyFromKeyVault = true
+
+// Får skriva hemligheter i Key Vault. Lägg till fler object-id vid behov:
+//   az ad signed-in-user show --query id -o tsv
+param keyVaultAdminObjectIds = [
+  'dc036cf3-174b-446c-b539-7a08c791407c'
+]
 
 param visionFeatures = 'tags,objects,people'
 

@@ -42,6 +42,12 @@ param visionFeatures string = 'tags,objects,people'
 @description('true = appen kör FakeVisionAnalyzer i stället för att anropa Computer Vision. Används i kursprenumerationen där vi saknar roll på kursansvarigs Vision-resurs.')
 param visionUseFake bool = false
 
+@description('true = appen autentiserar mot Computer Vision med en nyckel som hämtas från Key Vault. Behövs när Vision-resursen ligger i en annan Entra-tenant, där Managed Identity inte kan få en token. Hemligheten "vision-api-key" måste finnas i valvet innan detta slås på.')
+param visionKeyFromKeyVault bool = false
+
+@description('Object-id för de personer som ska få skriva hemligheter i Key Vault (az ad signed-in-user show --query id -o tsv).')
+param keyVaultAdminObjectIds array = []
+
 @description('Sätt till false om ditt konto saknar behörighet att skapa rolltilldelningar. Då måste en admin tilldela rollerna manuellt — se ARCHITECTURE.md.')
 param assignRoles bool = true
 
@@ -99,6 +105,8 @@ var appInsightsName = 'appi-${namePrefix}-${environment}'
 var environmentName = 'cae-${namePrefix}-${environment}'
 var containerAppName = 'ca-${namePrefix}-api-${environment}'
 var actionGroupName = 'ag-${namePrefix}-${environment}'
+var keyVaultName = toLower('kv${namePrefix}${environment}${shortSuffix}')
+var visionKeySecretName = 'vision-api-key'
 
 var imageContainerName = 'images'
 var inspectionContainerName = 'inspections'
@@ -214,6 +222,52 @@ resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-0
 resource inspectionQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
   parent: queueService
   name: queueName
+}
+
+// -----------------------------------------------------------------------------
+// Key Vault: nyckeln till Computer Vision
+// -----------------------------------------------------------------------------
+// Kursens Vision-resurs ligger i en annan Entra-tenant. En managed identity kan
+// bara få tokens i sin egen tenant, så där fungerar inte Managed Identity mot
+// Vision. Nyckeln läggs därför i Key Vault, och Container App:en hämtar den med
+// sin managed identity. Nyckeln finns aldrig i koden, i git eller i mallen.
+//
+// Åtkomstpolicyer i stället för RBAC: då behövs ingen rolltilldelning, som vårt
+// konto inte får skapa i kursprenumerationen.
+
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: keyVaultName
+  location: location
+  tags: tags
+  properties: {
+    tenantId: subscription().tenantId
+    sku: {
+      family: 'A'
+      name: 'standard'
+    }
+    enableRbacAuthorization: false
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 7
+    accessPolicies: concat(
+      [
+        {
+          // Appen får bara läsa hemligheter, inget annat.
+          tenantId: subscription().tenantId
+          objectId: identity.properties.principalId
+          permissions: {
+            secrets: [ 'get' ]
+          }
+        }
+      ],
+      map(keyVaultAdminObjectIds, id => {
+        tenantId: subscription().tenantId
+        objectId: id
+        permissions: {
+          secrets: [ 'get', 'list', 'set' ]
+        }
+      })
+    )
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -421,15 +475,25 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
           identity: identity.id
         }
       ]
-      // Inga secrets behövs. Application Insights connection string är inte
-      // en hemlighet i egentlig mening, men vi lägger den som secret ändå så
-      // att den inte visas i klartext i portalens miljövariabellista.
-      secrets: [
-        {
-          name: 'appinsights-connection-string'
-          value: appInsights.properties.ConnectionString
-        }
-      ]
+      // Application Insights connection string är inte en hemlighet i egentlig
+      // mening, men vi lägger den som secret ändå så att den inte visas i
+      // klartext i portalens miljövariabellista. Vision-nyckeln är en referens
+      // till Key Vault — värdet hämtas av plattformen med vår managed identity.
+      secrets: concat(
+        [
+          {
+            name: 'appinsights-connection-string'
+            value: appInsights.properties.ConnectionString
+          }
+        ],
+        visionKeyFromKeyVault ? [
+          {
+            name: 'vision-api-key'
+            keyVaultUrl: '${keyVault.properties.vaultUri}secrets/${visionKeySecretName}'
+            identity: identity.id
+          }
+        ] : []
+      )
     }
     template: {
       containers: [
@@ -440,7 +504,12 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
             cpu: json(containerCpu)
             memory: containerMemory
           }
-          env: [
+          env: concat(visionKeyFromKeyVault ? [
+            {
+              name: 'Vision__ApiKey'
+              secretRef: 'vision-api-key'
+            }
+          ] : [], [
             {
               name: 'ASPNETCORE_ENVIRONMENT'
               value: environment == 'prod' ? 'Production' : 'Staging'
@@ -489,7 +558,7 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
               name: 'Worker__MaxConcurrentAnalyses'
               value: environment == 'prod' ? '3' : '1'
             }
-          ]
+          ])
           // Båda proberna pekar på /health, inte /health/ready. Det är medvetet:
           // /health/ready kollar även Computer Vision, och om rollen inte hunnit
           // få effekt skulle hela revisionen underkännas och deployen misslyckas.
@@ -677,3 +746,6 @@ output managedIdentityPrincipalId string = identity.properties.principalId
 
 @description('Managed identity-ns client-id.')
 output managedIdentityClientId string = identity.properties.clientId
+
+@description('Key Vault-namnet. Lägg Vision-nyckeln här: az keyvault secret set --vault-name <namn> --name vision-api-key ...')
+output keyVaultName string = keyVault.name

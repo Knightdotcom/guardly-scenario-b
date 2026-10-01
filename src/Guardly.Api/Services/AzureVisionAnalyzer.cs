@@ -72,8 +72,15 @@ public class AzureVisionAnalyzer : IVisionAnalyzer
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, url);
-                request.Headers.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await GetTokenAsync(cancellationToken));
+                if (UsesApiKey)
+                {
+                    request.Headers.Add("Ocp-Apim-Subscription-Key", _options.ApiKey);
+                }
+                else
+                {
+                    request.Headers.Authorization =
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await GetTokenAsync(cancellationToken));
+                }
 
                 using var content = new ByteArrayContent(bytes);
                 content.Headers.ContentType =
@@ -157,8 +164,21 @@ public class AzureVisionAnalyzer : IVisionAnalyzer
             0, (int)HttpStatusCode.BadGateway, "Okänt fel", "Analysen misslyckades av okänd anledning.", false);
     }
 
+    /// <summary>
+    /// Nyckel används bara när Vision-resursen ligger i en annan tenant, där Managed
+    /// Identity inte kan få en token. Nyckeln kommer från Key Vault, aldrig från koden.
+    /// </summary>
+    private bool UsesApiKey => !string.IsNullOrWhiteSpace(_options.ApiKey);
+
     public async Task<bool> CanReachServiceAsync(CancellationToken cancellationToken)
     {
+        if (UsesApiKey)
+        {
+            // Med nyckel finns ingen token att hämta. Att nyckeln är satt betyder att
+            // Key Vault-referensen gick att lösa upp, annars hade revisionen inte startat.
+            return true;
+        }
+
         try
         {
             // Räcker att vi får ut en token — då fungerar Managed Identity och endpointen är satt.

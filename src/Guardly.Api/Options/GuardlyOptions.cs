@@ -52,6 +52,15 @@ public class VisionOptions
 
     /// <summary>Sätts till true lokalt för att använda en fejkad analysator utan Azure.</summary>
     public bool UseFake { get; set; }
+
+    /// <summary>
+    /// Nyckel till Computer Vision. Används bara när Vision-resursen ligger i en annan
+    /// Entra-tenant än appen — då kan Managed Identity inte få en token för den.
+    /// Sätts aldrig i appsettings: Container App:en hämtar den från Key Vault med sin
+    /// managed identity och lägger den i miljövariabeln Vision__ApiKey.
+    /// Tom = Managed Identity används, som vanligt.
+    /// </summary>
+    public string ApiKey { get; set; } = string.Empty;
 }
 
 /// <summary>Trösklar och nyckelord för regelmotorn. Ligger i konfiguration så att Guardly kan justera utan ny deploy.</summary>
