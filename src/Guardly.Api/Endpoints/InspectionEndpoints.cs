@@ -79,7 +79,7 @@ public static class InspectionEndpoints
             .WithTags(Tag)
             .WithSummary("Hämta originalbilden för en inspektion")
             .WithDescription("Strömmar originalbilden från Blob Storage. Containern är privat, så det här är enda vägen in.")
-            .Produces<IResult>(StatusCodes.Status200OK, "image/jpeg")
+            .Produces(StatusCodes.Status200OK, contentType: "image/jpeg")
             .ProducesProblem(StatusCodes.Status404NotFound);
     }
 

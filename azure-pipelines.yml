@@ -109,6 +109,16 @@ stages:
                 az bicep build --file infra/main.bicep --stdout > /dev/null
                 echo "Bicep-mallen är giltig."
 
+          # Stoppa direkt om pipeline-variablerna fortfarande är platshållare.
+          # Annars fallerar az acr build med ett betydligt mer kryptiskt fel.
+          - bash: |
+              if [[ "$(acrName)" == *XXXX* ]]; then
+                echo "##vso[task.logissue type=error]acrName är fortfarande en platshållare. Fyll i värdet från scripts/.pipeline-varden.txt (se docs/NU.md steg 3)."
+                exit 1
+              fi
+              echo "Pipeline-variablerna är ifyllda."
+            displayName: 'Kontrollera pipeline-variabler'
+
   # ===========================================================================
   # STEG 2 — Bygg image och pusha till ACR
   # ===========================================================================

@@ -112,26 +112,19 @@ Slå av igen med `Vision__UseFake=false` när rollen är på plats.
 
 ## Steg 5 — Två saker att fixa i repot (2 min)
 
-**Commit-namnet.** Alla commits står på "Can Öz" medan ditt Azure-konto är
-`jakob.elsaidi`. Känner Marcus dig under ett annat namn måste han kunna se att
-commitarna är dina. Kör i så fall:
+**Commit-historiken.** Kravet är att *alla* teammedlemmar har egna commits.
+Skriv **inte** om historiken med `filter-branch` — det raderar den andra
+personens commits och kräver force push mot en delad `main`. Se i stället till
+att var och en committar med sitt eget namn:
 
 ```bash
-git filter-branch -f --env-filter '
-export GIT_AUTHOR_NAME="DITT NAMN"
-export GIT_AUTHOR_EMAIL="din.mejl@iths.se"
-export GIT_COMMITTER_NAME="DITT NAMN"
-export GIT_COMMITTER_EMAIL="din.mejl@iths.se"
-' -- --all
-git push --force
+git config user.name   # ska visa ditt eget namn
+git config user.email  # ska vara en mejl som är kopplad till ditt GitHub-konto
 ```
 
-Enklare alternativ om du inte vill röra historiken: lägg en rad högst upp i
-README — "Inlämnat av <ditt namn>, <din mejl>" — och nämn det i presentationen.
-
-**Reflektionen.** `REFLEKTION_Can_Oz.md` är ett utkast skrivet åt dig. Byt namn
-på filen till ditt eget och läs igenom den — du måste kunna stå för varje mening
-muntligt. Hinner du bara en sak: läs avsnittet om vad du lärde dig om molnekonomi,
+**Reflektionen.** Varje person ska ha en egen `REFLEKTION_[dittnamn].md`,
+skriven själv. Byt inte namn på någon annans fil — skapa din egen. Du måste kunna
+stå för varje mening muntligt. Hinner du bara en sak: läs avsnittet om vad du lärde dig om molnekonomi,
 det är det som ger VG-poängen.
 
 ---
