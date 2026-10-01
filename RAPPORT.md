@@ -1,278 +1,252 @@
-# Kundrapport — Guardly AB
+# Teknisk leveransrapport
 
-**Till:** Guardly AB, ledningsgruppen och styrelsen
-**Från:** Can "Knight" Öz, konsult
-**Datum:** oktober 2026
-**Ärende:** Leverans av molnbaserad plattform för säkerhetsinspektion av byggplatsfoton
-
-> **Om mallen:** Den här rapporten följer strukturen i `exercises/kundrapport_mall.md`.
-> Stämmer inte rubrikerna exakt med kursens mall, anpassa ordningen — innehållet
-> nedan täcker de frågor mallen ställer.
+**Uppdrag:** Guardly AB — Säkerhetsinspektion av byggplatsfoton som tjänst
+**Konsultteam:** Can Öz, Jakob El Saidi
+**Datum:** 2 oktober 2026
+**Version:** 1.0
 
 ---
 
-## 1. Sammanfattning
+## Sammanfattning
 
-Guardly har i dag tre ingenjörer som manuellt granskar byggplatsfoton i ett Google Sheet
-åt 12 betalande kunder. Ni når inte längre takten, och ni kan inte ta in fler kunder utan
-att anställa.
-
-Vi har byggt en plattform som gör den första granskningen åt er automatiskt. Platschefen
-laddar upp ett foto, systemet analyserar bilden med Azure Computer Vision och returnerar
-taggar, konfidenspoäng och konkreta varningar: saknas hjälm, väst eller skyddsskor, och
-finns riskindikatorer som stegar eller ställningar i bild.
-
-**Tre saker att ta med sig:**
-
-1. **Kapaciteten är inte längre ert problem.** Systemet klarar i dag omkring 12 000
-   bilder i timmen. Ni gör 200 om dagen. Ni kan tiodubbla kundbasen utan att röra
-   infrastrukturen.
-2. **Kostnaden är försumbar mot intäkten.** Vid lansering med 100 arbetsplatser kostar
-   drift cirka **509 kr i månaden** mot en intäkt på 149 900 kr — 0,34 %. Tredubblad
-   kundbas ger inte tredubblad kostnad, utan 922 kr.
-3. **Ingenjörerna byter roll, de försvinner inte.** Systemet ersätter inte deras
-   omdöme. Det sorterar bort de bilder som uppenbart är i sin ordning så att de tre kan
-   lägga tiden på de bilder där det faktiskt är något.
-
-Det finns en sak vi vill att ni läser innan ni skriver på nästa kundavtal: formuleringen
-"obegränsat antal bilder" är den enda verkliga ekonomiska risken i affärsmodellen.
-Se avsnitt 6.
+Vi har levererat en molnbaserad tjänst som gör den första granskningen av byggplatsfoton
+automatiskt. Platschefen laddar upp ett foto och får några sekunder senare tillbaka vad
+bilden innehåller och konkreta varningar — till exempel att en person saknar hjälm eller
+väst, eller att det finns ställningar i bild som kräver fallskydd. Guardlys tre ingenjörer
+behöver inte längre gå igenom varje bild för hand i ett kalkylark, utan kan lägga tiden på
+de bilder där systemet flaggat något. Tjänsten körs i Microsoft Azure, växer automatiskt
+när många laddar upp samtidigt och kostar cirka 509 kronor i månaden vid lansering.
 
 ---
 
-## 2. Vad vi har levererat
+## Vad som levereras
 
-### Ett API med sju endpoints
+### Inkluderat i leveransen
+
+| Komponent | Teknisk lösning | Status |
+|---|---|---|
+| REST API | .NET 8 Minimal API, 7 endpoints (krav: 4) | ✅ Levererat |
+| Containerisering | Docker, multi-stage build, körs som icke-root | ✅ Levererat |
+| Driftsättning | Azure Container Apps, 2–10 repliker | ✅ Levererat |
+| Bildarkiv | Azure Container Registry (Basic) | ✅ Levererat |
+| Fillagring | Azure Blob Storage — originalbild + ett JSON-dokument per inspektion | ✅ Levererat |
+| Kö för bildanalys | Azure Storage Queue + bakgrundsworker | ✅ Levererat |
+| AI-analys | Azure Computer Vision, Image Analysis 4.0 | ✅ Levererat |
+| Hemlighetshantering | Azure Key Vault, läses med managed identity | ✅ Levererat |
+| Övervakning | Application Insights + Log Analytics | ✅ Levererat |
+| Infrastruktur som kod | Bicep, separata parameterfiler för dev och prod | ✅ Levererat |
+| Automatiserad driftsättning | Azure DevOps YAML-pipeline: bygg → test → ACR → Container Apps | ✅ Levererat |
+| API-dokumentation | Swagger UI (`/swagger`) | ✅ Levererat |
+| Larm | Två larm definierade i Bicep (serverfel, kölängd) | ⚠️ Definierat, ej aktivt — kursprenumerationens policy nekar larmresurser |
+
+**API:ets endpoints:**
 
 | Anrop | Vad platschefen får |
 |---|---|
 | `POST /inspections` | Laddar upp ett foto, får tillbaka ett inspektions-ID direkt |
 | `GET /inspections/{id}` | Analysresultat: taggar, konfidenspoäng, varningar |
-| `GET /inspections` | Alla inspektioner, filtrerbart per arbetsplats |
+| `GET /inspections` | Alla inspektioner, filtrerbart per arbetsplats och status |
 | `GET /inspections/{id}/image` | Originalbilden |
 | `GET /stats` | Sammanställning per arbetsplats — underlaget till veckorapporten |
 | `GET /health`, `GET /health/ready` | Driftövervakning |
 
-API:et är dokumenterat och testbart direkt i webbläsaren på `/swagger`. Er kommande
-mobilapp eller integratör behöver ingen separat dokumentation — den ligger i systemet.
+Varje varning har en allvarlighetsgrad (`High`, `Medium`, `Info`) och en konfidenspoäng,
+så att de allvarligaste avvikelserna kan hamna överst i en arbetslista. Tröskelvärdena
+ligger i konfigurationen och kan justeras utan ny kod.
 
-### Ett exempel på vad ni får tillbaka
+### Utanför leveransens scope
 
-```json
-{
-  "id": "8f3a2b1c9d4e5f6a7b8c9d0e1f2a3b4c",
-  "siteId": "kvarteret-vallgatan",
-  "zone": "Plan 3, östra gaveln",
-  "status": "Completed",
-  "createdAt": "2026-10-03T13:42:18Z",
-  "peopleCount": 2,
-  "tags": [
-    { "name": "construction site", "confidence": 0.961 },
-    { "name": "scaffolding",       "confidence": 0.874 },
-    { "name": "safety vest",       "confidence": 0.831 },
-    { "name": "outdoor",           "confidence": 0.792 }
-  ],
-  "warnings": [
-    {
-      "code": "MISSING_HELMET",
-      "message": "Ingen hjälm syns på någon av de 2 personerna i bilden.",
-      "severity": "High",
-      "confidence": 0.7
-    },
-    {
-      "code": "ZONE_HAZARD",
-      "message": "Riskindikator i bilden: scaffolding. Kontrollera avspärrning och fallskydd i zonen.",
-      "severity": "Medium",
-      "confidence": 0.874
-    }
-  ],
-  "analysisDurationMs": 1240,
-  "visionTransactions": 3
-}
-```
+Följande punkter identifierades under uppdraget men ingår inte i denna leverans. De
+rekommenderas som nästa steg.
 
-Varje varning har en **allvarlighetsgrad** (`High`, `Medium`, `Info`) och en
-**konfidenspoäng**. Det gör att ni kan bygga en arbetslista där de allvarligaste
-avvikelserna hamnar överst, och att era ingenjörer kan ställa in hur känsligt systemet
-ska vara utan att någon behöver skriva om kod.
-
-### Så här känns det för platschefen
-
-Uppladdningen svarar på ungefär **två tiondels sekund**. Analysen är klar några sekunder
-senare. Det är medvetet byggt så: platschefen ska kunna ta tjugo bilder i rad utan att
-stå och vänta på telefonen mellan varje. Bilderna läggs i en kö och betas av i bakgrunden.
-
----
-
-## 3. Hur systemet är byggt
-
-```
-Platschefens mobil  →  API i Azure Container Apps  →  Azure Computer Vision
-                              ↓
-                       Azure Storage
-                    (bilder + resultat + kö)
-```
-
-Fyra byggstenar:
-
-- **Azure Container Apps** kör applikationen. Den startar fler kopior automatiskt när
-  många laddar upp samtidigt och drar ner igen när det lugnar sig.
-- **Azure Computer Vision** gör bildanalysen. Det är Microsofts tjänst, samma teknik
-  som används i stor skala världen över.
-- **Azure Blob Storage** lagrar originalbilderna och ett resultatdokument per
-  inspektion. Inget kastas.
-- **En kö** mellan uppladdning och analys. Det är den som gör att systemet aldrig säger
-  nej till en uppladdning, oavsett hur många som kommer samtidigt.
-
-Allt är beskrivet som kod (Bicep) och driftsätts automatiskt via en pipeline. Vill ni i
-framtiden flytta till en annan region eller sätta upp en separat miljö för en stor kund
-är det ett kommando, inte ett projekt.
-
----
-
-## 4. Vad systemet klarar — och styrelsens fråga
-
-> *"Vad händer om en kund laddar upp 500 bilder på fem minuter? Skalas systemet — och vad kostar det?"*
-
-**Systemet skalar. Ingen uppladdning nekas. Samtliga 500 resultat är klara ungefär två
-och en halv minut efter att sista bilden laddats upp. Det kostar 16 kronor.**
-
-Så här går det till: uppladdningarna hanteras omedelbart eftersom de bara sparar bilden
-och lägger ett meddelande på kön — de väntar aldrig in bildanalysen. Systemet startar
-automatiskt fler kopior av applikationen när trycket ökar. Analysen betar sedan av kön
-i den takt Microsofts tjänst tillåter, cirka 3,3 bilder per sekund.
-
-Samma sak gäller fredagseftermiddagarna. Med 100 arbetsplatser som var och en laddar upp
-50 bilder mellan 15 och 17 blir det 5 000 bilder på två timmar. Det ligger väl inom vad
-systemet klarar, och kön gör att toppen jämnas ut av sig själv.
-
-**Var taket går:** cirka 12 000 bilder i timmen med dagens inställningar. Ni gör i dag
-200 om dagen. Skulle ni närma er taket finns tre åtgärder, varav den första är gratis
-och tar fem minuter — se avsnitt 8 i den tekniska dokumentationen.
-
----
-
-## 5. Vad systemet kostar
-
-| | Vid lansering<br>100 arbetsplatser | Om kundbasen tredubblas<br>300 arbetsplatser |
-|---|---:|---:|
-| Drift av applikationen | 244 kr | 243 kr |
-| Bildanalys (Computer Vision) | 189 kr | 567 kr |
-| Lagring av bilder och resultat | 18 kr | 55 kr |
-| Övrigt (registry, övervakning, trafik) | 57 kr | 57 kr |
-| **Totalt per månad** | **509 kr** | **922 kr** |
-| Intäkt per månad | 149 900 kr | 449 700 kr |
-| **Infrastruktur som andel av intäkt** | **0,34 %** | **0,21 %** |
-| Kostnad per arbetsplats | 5,09 kr | 3,07 kr |
-
-**Lägg märke till att kostnaden inte tredubblas när kundbasen gör det** — den ökar med
-81 %. Det beror på att en stor del av kostnaden är fast: applikationen måste vara igång
-dygnet runt oavsett om den betjänar 100 eller 300 arbetsplatser. Ju fler kunder, desto
-billigare per kund. Det är en bra egenskap för en affärsmodell som er.
-
-Alla priser är från Azures prissida i september 2026, region Sweden Central, växelkurs
-10,50 kr per dollar. Detaljerad uträkning finns i `ARCHITECTURE.md`.
-
----
-
-## 6. Risker vi vill att ni känner till
-
-### Den viktigaste: "obegränsat antal bilder"
-
-Ert avtal säger obegränsat antal bilder för 1 499 kr per arbetsplats och månad. Vår
-kostnad per bild är fast — ungefär 3 öre. Det betyder:
-
-| Bilder per arbetsplats och månad | Vår kostnad | Andel av 1 499 kr |
-|---:|---:|---:|
-| 60 (dagens nivå) | 2 kr | 0,1 % |
-| 2 000 | 63 kr | 4 % |
-| 20 000 | 630 kr | 42 % |
-| 50 000 | 1 575 kr | **105 % — förlust** |
-
-En enda kund som sätter upp en kamera som fotograferar automatiskt varje minut skulle
-alltså kunna göra sitt eget abonnemang olönsamt. **Vår rekommendation:** skriv in en
-rimlighetsgräns i avtalet, förslagsvis 2 000 bilder per arbetsplats och månad med rörlig
-debitering därutöver. Vid 2 000 bilder är marginalen fortfarande 96 %, och ingen ärlig
-kund kommer i närheten av gränsen.
-
-### Systemet ser inte allt
-
-Computer Vision är tränad på bilder från hela världen, inte på svenska byggarbetsplatser.
-Den känner igen en hjälm, men den vet inte om det är rätt sorts hjälm, om hakbandet är
-spänt eller om den är CE-märkt. Tre konsekvenser:
-
-- **Falska varningar förekommer.** En person som står med ryggen till kan flaggas för
-  att sakna väst fast den syns framifrån.
-- **Missade avvikelser förekommer.** Dålig belysning, motljus och skymda personer gör
-  analysen osäkrare. Systemet flaggar `LOW_IMAGE_QUALITY` när det märker det, men det
-  fångar inte allt.
-- **Systemet är ett stöd, inte ett beslut.** Rapporten ska läsas av någon som kan
-  byggarbetsplatser. Det är därför konfidenspoängen redovisas öppet — ni ska kunna se
-  hur säkert systemet är, inte bara vad det tycker.
-
-Vi rekommenderar att ni de första månaderna låter era ingenjörer stickprovsgranska
-bilder som systemet godkänt. Det ger er både en kvalitetssiffra att visa kund och
-underlag för att justera känsligheten.
-
-### Personuppgifter
-
-Byggplatsfoton innehåller identifierbara personer, vilket gör dem till personuppgifter
-enligt GDPR. Tre saker behöver på plats innan ni går skarpt:
-
-1. **Autentisering på API:et.** Det är i dag öppet. Det här är den enskilt viktigaste
-   åtgärden och den bör göras före lansering.
-2. **Personuppgiftsbiträdesavtal** med era kunder — ni behandlar deras anställdas
-   bilder.
-3. **En gallringsrutin.** Hur länge sparas bilderna? Vi har byggt in möjlighet att
-   automatiskt flytta och radera, men själva beslutet är ert.
-
-### Beroendet av en leverantör
-
-Lösningen ligger på Azure och använder Azure Computer Vision. Byter Microsoft pris eller
-lägger ner tjänsten påverkar det er direkt. Bedömningen är att risken är låg på kort
-sikt, och vi har begränsat exponeringen genom att bildanalysen ligger bakom ett eget
-gränssnitt i koden — att byta till en annan leverantör är en avgränsad ändring, inte en
-omskrivning.
-
----
-
-## 7. Vad vi rekommenderar härnäst
-
-**Före lansering (måste göras):**
-
-1. Lägg på autentisering på API:et.
-2. Skriv in en rimlighetsgräns för antal bilder i kundavtalet.
-3. Bestäm och dokumentera gallringstid för bilderna.
-
-**De första tre månaderna:**
-
-4. Låt ingenjörerna stickprovsgranska och justera känsligheten utifrån verkliga data.
-5. Bygg en enkel webbvy ovanpå API:et så att platschefen slipper läsa JSON.
-6. Sätt upp automatisk flytt av gamla bilder till billigare lagring.
-
-**På sikt — och det här är den stora möjligheten:**
-
-7. **Träna en egen modell på era egna bilder.** Ni sitter på flera års manuellt granskade
-   byggplatsfoton i ert Google Sheet. Det är exakt det träningsmaterial som behövs för
-   att gå från en generell bildanalys till en som är tränad på svenska
-   byggarbetsplatser. Det skulle minska de falska varningarna kraftigt och göra
-   produkten till något konkurrenter inte kan kopiera. **Det där kalkylbladet är inte
-   en flaskhals — det är er värdefullaste tillgång.** Börja med att inte kasta det.
-
----
-
-## 8. Leverans
-
-| | |
+| Punkt | Motivering |
 |---|---|
-| **Källkod** | Git-repo med full historik |
-| **API** | Publik URL, Swagger på `/swagger` |
-| **Infrastruktur** | Bicep-mallar med separata inställningar för test och produktion |
-| **Driftsättning** | Automatisk pipeline: kodändring → test → driftsättning |
-| **Teknisk dokumentation** | `ARCHITECTURE.md` |
-| **Kom-igång-guide** | `README.md` |
-| **Återställningsrutin** | `docs/ROLLBACK.md` |
+| Autentisering för slutanvändare | API:et är i dag öppet. Kräver Entra ID eller API-nyckel per kund och definierade roller — måste göras före kundlansering |
+| Egen tränad bildmodell (Custom Vision) | Den generella modellen känner inte igen hjälm och väst tillförlitligt (se Kvarvarande risker). Kräver märkt träningsdata från Guardlys befintliga bilder |
+| Aktiva larm | Larmen finns i Bicep men kursprenumerationens policy nekar larmresurser. Slås på med en parameter i Guardlys egen prenumeration |
+| Gallring av bilder | Ingen automatisk radering eller flytt till billigare lagring finns. Gallringstiden är ett GDPR-beslut som Guardly måste fatta först |
+| Kvot per arbetsplats | Ingen begränsning av antal bilder per kund. Behövs för att skydda affärsmodellen "obegränsat antal bilder" |
+| Webbgränssnitt för platschefen | API:et svarar med JSON. En enkel webbvy är nästa steg för användarvänlighet |
+| Disaster recovery | Lagringen är lokalt redundant (LRS) — kurspolicyn tillåter inte zonredundans. En återställningsplan bör definieras före produktion |
 
-Systemet är driftsatt och svarar på sin publika adress. Kodändringar går live automatiskt
-efter att testerna passerat, och går något fel finns föregående version kvar och kan
-återställas på under en minut.
+---
+
+## Arkitektur
+
+### Systemdiagram
+
+```mermaid
+flowchart TD
+    U[Platschefens mobil / klient] -->|POST /inspections| API[Azure Container Apps<br/>Guardly API, 2–10 repliker]
+    API -->|originalbild + inspektionsdokument| BLOB[(Azure Blob Storage)]
+    API -->|jobb| Q[[Azure Storage Queue]]
+    Q --> W[Bakgrundsworker i samma app]
+    W -->|bild| CV[Azure Computer Vision<br/>Image Analysis 4.0]
+    CV -->|taggar, objekt, personer| W
+    W -->|regelmotor → varningar| BLOB
+    U -->|GET /inspections/id| API
+    KV[Azure Key Vault] -.->|Vision-nyckel via managed identity| API
+    MI{{Managed Identity}} -.-> BLOB
+    MI -.-> Q
+    MI -.-> KV
+    MI -.->|AcrPull| ACR[Azure Container Registry]
+    ACR -.->|image| API
+```
+
+**Flödet:** Uppladdningen sparar bilden och lägger ett jobb på kön, och svarar efter
+ungefär två tiondels sekund. Analysen sker i bakgrunden: workern skickar bilden till
+Computer Vision, Guardlys regelmotor tolkar svaret till varningar, och resultatet sparas
+som ett JSON-dokument i Blob Storage. Platschefen kan ta tjugo bilder i rad utan att
+vänta mellan varje.
+
+### Motiverade arkitekturval
+
+**Varför Azure Container Apps och inte AKS?**
+Guardly har tre ingenjörer och ingen driftorganisation. Container Apps sköter servrar,
+uppdateringar, certifikat och skalning åt oss, och vi betalar bara för de resurser som
+faktiskt används. AKS skulle ge mer kontroll, men kräver att någon sätter upp och
+underhåller ingress, certifikathantering och nodpooler — arbete som inte gör produkten
+bättre. Applikationen är en enda container som tar emot HTTP och skalar på last, vilket
+är precis det Container Apps är byggt för. AKS blir aktuellt först om Guardly växer till
+många samverkande tjänster eller behöver GPU för egen modellträning.
+
+**Varför Bicep och inte manuell konfiguration?**
+All infrastruktur är beskriven i `infra/main.bicep` och versionshanteras i git, så varje
+ändring är spårbar och granskningsbar. Mallen är idempotent: den kan köras om hur många
+gånger som helst och ger samma resultat, vilket gör att en ny miljö för en stor kund är
+ett kommando, inte ett projekt. Med `what-if` ser vi exakt vad som ändras innan
+produktionen rörs — under leveransen fångade det två policyfel innan de nådde drift.
+
+**Varför Azure Blob Storage för fillagring?**
+Bilder är stora binärfiler som läses sällan efter analys — det är vad Blob Storage är
+gjort för, till cirka 0,19 kr per GB och månad. Varje inspektion sparas som ett eget
+JSON-dokument under arbetsplatsens prefix, så att "alla inspektioner för arbetsplats X"
+blir ett enda billigt anrop utan databas. Åtkomsten sker uteslutande med managed identity;
+nyckelbaserad åtkomst är avstängd på kontot.
+
+---
+
+## Säkerhetsarkitektur
+
+### Identitet och åtkomst
+
+| Resurs | Åtkomstkontroll |
+|---|---|
+| Azure Container Apps | User-assigned managed identity — ingen hårdkodad nyckel |
+| Azure Blob Storage + Queue | RBAC via managed identity (Storage Blob/Queue Data Contributor). Nyckelåtkomst avstängd (`allowSharedKeyAccess: false`) |
+| Azure Container Registry | RBAC via managed identity (AcrPull). Admin-användare avstängd |
+| Azure Key Vault | Åtkomstpolicy: appens identitet får bara läsa hemligheter |
+| Azure Computer Vision | Nyckel från Key Vault, hämtad med managed identity (se nedan) |
+| Pipeline-credentials | Azure DevOps service connection med workload identity federation — inget lösenord som kan läcka |
+
+### Hemlighetshantering
+
+Inga credentials lagras i källkod, i Bicep-mallarna, i pipelinen eller i git-historiken.
+Storage, kö och registry nås direkt med managed identity, utan någon hemlighet alls.
+
+Computer Vision är undantaget. Kursens Vision-resurs ligger i en annan Entra-tenant än
+vår prenumeration, och en managed identity kan bara få åtkomst inom sin egen tenant. Vi
+lade därför nyckeln i Azure Key Vault. Container App:en refererar till hemligheten och
+hämtar den med sin managed identity när den startar — värdet finns aldrig i kod eller
+konfigurationsfiler. Ligger Vision-resursen i samma tenant, som den skulle göra i
+Guardlys egen prenumeration, används managed identity direkt och nyckeln behövs inte.
+
+### Kvarvarande risker
+
+| Risk | Sannolikhet | Åtgärd |
+|---|---|---|
+| API:et saknar autentisering för slutanvändare | Hög | Entra ID Easy Auth eller API-nyckel per kund före lansering |
+| Bildanalysen missar hjälm och väst och ger falska varningar | Hög | Stickprovsgranskning av ingenjörerna; träna en egen modell på Guardlys bilder |
+| Byggplatsfoton är personuppgifter (GDPR) | Hög | Personuppgiftsbiträdesavtal med kunderna och beslutad gallringstid |
+| "Obegränsat antal bilder" kan göra en kund olönsam | Medel | Rimlighetsgräns i avtalet, t.ex. 2 000 bilder per arbetsplats och månad |
+| Inga aktiva larm — fel upptäcks först när någon tittar | Medel | Slå på larmen i Guardlys egen prenumeration (en parameter) |
+| Ingen rate limiting på `POST /inspections` | Medel | Throttling per kund eller Azure API Management |
+| Vision-nyckeln kan läcka utanför systemet | Låg | Rotera nyckeln; den byts på ett ställe i Key Vault |
+| Beroende av Microsoft som leverantör | Låg | Bildanalysen ligger bakom ett eget gränssnitt i koden — byte av leverantör är en avgränsad ändring |
+
+**Om bildanalysens träffsäkerhet.** Vi testade med riktiga byggplatsfoton. Computer
+Vision hittade personerna korrekt, men känner inte igen en bygghjälm som en hjälm — den
+beskriver scenen (byggnad, himmel, möbler), inte utrustningen på personerna. Resultatet
+blev en varning om saknad hjälm även för en arbetare som bar en. Systemet ska därför ses
+som ett sorteringsstöd, inte ett beslut, tills en egen modell är tränad.
+
+---
+
+## Kostnadskalkyl
+
+### Månadskostnad vid lansering
+
+| Resurs | SKU | Uppskattad kostnad/mån |
+|---|---|---:|
+| Container Apps Environment | Consumption | 0 kr |
+| Container App | Consumption, 2 repliker à 0,5 vCPU / 1 GiB | 244 kr |
+| Azure Container Registry | Basic | 52 kr |
+| Azure Blob Storage + Queue | Standard LRS, Hot | 18 kr |
+| Azure Computer Vision | S1, 18 000 transaktioner | 189 kr |
+| Azure Key Vault | Standard | 0 kr |
+| Log Analytics + Application Insights | Pay-as-you-go, under gratisgränsen | 0 kr |
+| Utgående datatrafik | — | 5 kr |
+| Azure DevOps | Basic (≤ 5 användare), 1 gratis parallellt jobb | Gratis |
+| **Totalt** | | **509 kr/mån** |
+
+Beräknat med 20 kunder (100 arbetsplatser) och 200 bilder per dag, alltså 6 000 analyser
+per månad. Azure debiterar Computer Vision per begärd funktion, inte per bild: vi begär
+tre (taggar, objekt, personer), vilket ger 18 000 transaktioner. Källa: Azure Pricing
+Calculator, region Sweden Central, september 2026, 1 USD = 10,50 kr.
+
+Intäkten vid lansering är 100 × 1 499 = 149 900 kr/mån, så infrastrukturen motsvarar
+**0,34 % av intäkten**. Om kundbasen tredubblas blir kostnaden **922 kr/mån** — inte tre
+gånger så mycket, eftersom applikationens grundkostnad är fast. Kostnaden per arbetsplats
+sjunker då från 5,09 kr till 3,07 kr. Detaljerad uträkning finns i `ARCHITECTURE.md`.
+
+### Skalningspunkt
+
+Styrelsens fråga — *vad händer om en kund laddar upp 500 bilder på fem minuter?* —
+besvaras av kön. Uppladdningarna nekas aldrig, eftersom de bara sparar bilden och lägger
+ett jobb på kön. Container Apps startar fler repliker när kön växer, och samtliga 500
+resultat är klara ungefär två och en halv minut efter sista uppladdningen. Det kostar
+cirka 16 kronor.
+
+Flaskhalsen är Computer Vision, inte vår applikation. S1-nivån tillåter 10 transaktioner
+per sekund, och med tre transaktioner per bild blir taket cirka 3,3 bilder per sekund —
+ungefär 12 000 bilder i timmen. Guardly gör i dag 200 om dagen. Vid en fyrdubbling av
+trafiken märks ingen skillnad i vardagen; först om toppar närmar sig taket behöver
+Guardly antingen begära höjd gräns hos Microsoft (kostnadsfritt) eller minska antalet
+funktioner per bild, vilket också sänker kostnaden.
+
+---
+
+## Rekommendationer inför produktionssättning
+
+1. **Autentisering för slutanvändare** — Entra ID Easy Auth eller API-nyckel per kund
+   innan offentlig lansering. Den enskilt viktigaste åtgärden.
+2. **Rimlighetsgräns i kundavtalet** — förslagsvis 2 000 bilder per arbetsplats och
+   månad med rörlig debitering därutöver. Vid 2 000 bilder är marginalen fortfarande 96 %.
+3. **Aktivera larmen** — i Guardlys egen prenumeration slås de på med parametern
+   `alertEmail`: larm vid fler än 5 serverfel på 5 minuter och vid fler än 200 bilder i kön.
+4. **Gallringstid och personuppgiftsbiträdesavtal** — bestäm hur länge bilderna sparas
+   och lägg in en automatisk raderingsregel i Blob Storage.
+5. **Kostnadslarm** — budget-alert i Azure Cost Management vid 80 % av månadsbudgeten.
+6. **Stickprovsgranskning** — låt ingenjörerna granska bilder som systemet godkänt de
+   första månaderna, och justera känsligheten utifrån verkliga data.
+7. **Träna en egen modell** — Guardlys manuellt granskade bilder i kalkylarket är exakt
+   det träningsmaterial som behövs för att känna igen hjälm och väst på svenska
+   byggarbetsplatser. Kalkylarket är inte en flaskhals, det är bolagets värdefullaste
+   tillgång.
+
+---
+
+## Överlämning
+
+| Leverabel | Plats |
+|---|---|
+| Källkod | https://github.com/Knightdotcom/guardly-scenario-b |
+| Bicep-mallar | `/infra/` i repot |
+| Pipeline-definition | `azure-pipelines.yml` i repots rot |
+| API-dokumentation | https://ca-guardly-api-prod.politeocean-d6e94601.swedencentral.azurecontainerapps.io/swagger |
+| Teknisk dokumentation | `ARCHITECTURE.md` i repots rot |
+| Återställningsrutin | `docs/ROLLBACK.md` |
+| Denna rapport | `RAPPORT.md` i repots rot |
+
+Rapporten är upprättad av konsultteamet som ett avslutande leveransdokument. Frågor
+hänvisas till teamet via Azure DevOps.
