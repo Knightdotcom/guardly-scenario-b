@@ -119,7 +119,8 @@ produktionen rörs — under leveransen fångade det två policyfel innan de nå
 
 **Varför Azure Blob Storage för fillagring?**
 Bilder är stora binärfiler som läses sällan efter analys — det är vad Blob Storage är
-gjort för, till cirka 0,19 kr per GB och månad. Varje inspektion sparas som ett eget
+gjort för, till cirka 0,19 kr per GB och månad och utan någon kapacitet att dimensionera
+i förväg, eftersom lagringen växer med antalet bilder. Varje inspektion sparas som ett eget
 JSON-dokument under arbetsplatsens prefix, så att "alla inspektioner för arbetsplats X"
 blir ett enda billigt anrop utan databas. Åtkomsten sker uteslutande med managed identity;
 nyckelbaserad åtkomst är avstängd på kontot.
@@ -220,16 +221,23 @@ funktioner per bild, vilket också sänker kostnaden.
 
 1. **Autentisering för slutanvändare** — Entra ID Easy Auth eller API-nyckel per kund
    innan offentlig lansering. Den enskilt viktigaste åtgärden.
-2. **Rimlighetsgräns i kundavtalet** — förslagsvis 2 000 bilder per arbetsplats och
+2. **Monitoring** — Application Insights är redan kopplat. I Guardlys egen prenumeration
+   slås larmen på med parametern `alertEmail`: larm vid fler än 5 serverfel på 5 minuter
+   och vid fler än 200 bilder i kön. Vi larmar på antal fel i stället för andel, eftersom
+   fem minuter vid 200 bilder om dagen kan innehålla en enda förfrågan — ett procentlarm
+   hade gått till 100 % på ett enda fel. Komplettera med ett larm när svarstiden för
+   `POST /inspections` överstiger 2 sekunder.
+3. **Parametriserad infrastruktur** — dev och prod har redan separata Bicep-parameterfiler
+   (`main.dev.bicepparam`, `main.prod.bicepparam`). Nästa steg är att lägga prod i en egen
+   prenumeration, så att utvecklingsarbete aldrig kan påverka kundernas data.
+4. **Kostnadslarm** — budget-alert i Azure Cost Management vid 80 % av månadsbudgeten.
+5. **Rimlighetsgräns i kundavtalet** — förslagsvis 2 000 bilder per arbetsplats och
    månad med rörlig debitering därutöver. Vid 2 000 bilder är marginalen fortfarande 96 %.
-3. **Aktivera larmen** — i Guardlys egen prenumeration slås de på med parametern
-   `alertEmail`: larm vid fler än 5 serverfel på 5 minuter och vid fler än 200 bilder i kön.
-4. **Gallringstid och personuppgiftsbiträdesavtal** — bestäm hur länge bilderna sparas
+6. **Gallringstid och personuppgiftsbiträdesavtal** — bestäm hur länge bilderna sparas
    och lägg in en automatisk raderingsregel i Blob Storage.
-5. **Kostnadslarm** — budget-alert i Azure Cost Management vid 80 % av månadsbudgeten.
-6. **Stickprovsgranskning** — låt ingenjörerna granska bilder som systemet godkänt de
+7. **Stickprovsgranskning** — låt ingenjörerna granska bilder som systemet godkänt de
    första månaderna, och justera känsligheten utifrån verkliga data.
-7. **Träna en egen modell** — Guardlys manuellt granskade bilder i kalkylarket är exakt
+8. **Träna en egen modell** — Guardlys manuellt granskade bilder i kalkylarket är exakt
    det träningsmaterial som behövs för att känna igen hjälm och väst på svenska
    byggarbetsplatser. Kalkylarket är inte en flaskhals, det är bolagets värdefullaste
    tillgång.
