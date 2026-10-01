@@ -18,6 +18,7 @@ trigger:
       - main
   paths:
     exclude:
+      - '*.md'
       - '**/*.md'
       - docs/**
 
