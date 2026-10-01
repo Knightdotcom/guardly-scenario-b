@@ -154,8 +154,9 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   location: location
   tags: tags
   sku: {
-    // dev klarar sig med lokal redundans, prod speglar mot en andra zon.
-    name: environment == 'prod' ? 'Standard_ZRS' : 'Standard_LRS'
+    // LRS i båda miljöerna. Kursprenumerationens policy (Allowed-SKUs) nekar
+    // ZRS, annars hade prod speglats mot en andra zon.
+    name: 'Standard_LRS'
   }
   kind: 'StorageV2'
   properties: {
@@ -361,6 +362,9 @@ var httpScaleRule = {
   }
 }
 
+// OBS: 'identity' på en custom scale rule kräver API-version 2024-10-02-preview
+// eller senare på containerApps. Med 2024-03-01 avvisas deployen med
+// "Unknown properties identity in ContainerAppCustomScaleRule".
 var queueScaleRule = {
   name: 'queue-depth'
   custom: {
@@ -381,7 +385,7 @@ var scaleRules = enableQueueScaling ? [ httpScaleRule, queueScaleRule ] : [ http
 // Container App
 // -----------------------------------------------------------------------------
 
-resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
+resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
   name: containerAppName
   location: location
   tags: tags

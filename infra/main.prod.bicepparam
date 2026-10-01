@@ -7,10 +7,9 @@
 //                                     för den första platschefen som laddar upp
 //   maxReplicas        10 mot 3     — tar 500 bilder på fem minuter utan att kön byggs på
 //   CPU/minne          0.5/1.0Gi    — dubbla dev, rymmer parallell bildanalys
-//   Storage-redundans  ZRS mot LRS  — sätts i main.bicep utifrån environment
 //   Loggretention      90 mot 30 d  — kunder frågar om gamla inspektioner
 //   Köskalning         på           — skalar på analysbacklog, inte bara HTTP
-//   Larm               på           — 5xx-larm och kölängdslarm till driftjouren
+//   Larm               (på)         — 5xx-larm och kölängdslarm, se alertEmail nedan
 //
 // Kör:
 //   az deployment group what-if -g <rg> -f infra/main.bicep -p infra/main.prod.bicepparam
@@ -36,8 +35,11 @@ param logRetentionDays = 90
 
 param enableQueueScaling = true
 
-// Byt till en riktig adress innan skarp drift.
-param alertEmail = 'drift@guardly.example'
+// Larmen (action group + två metric alerts) är definierade i main.bicep men
+// kursprenumerationens policy nekar alla Microsoft.Insights-larmtyper. Tom
+// adress = larmen hoppas över så att deployen går igenom. I en egen
+// prenumeration: sätt en riktig adress så skapas de.
+param alertEmail = ''
 
 param assignRoles = true
 

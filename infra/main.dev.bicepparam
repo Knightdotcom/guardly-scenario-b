@@ -6,7 +6,6 @@
 //   minReplicas        2 i båda      — kravet gäller alla miljöer, inte bara prod
 //   maxReplicas        3 mot 10     — taket skyddar budgeten
 //   CPU/minne          0.25/0.5Gi   — halva prods storlek
-//   Storage-redundans  LRS mot ZRS  — sätts i main.bicep utifrån environment
 //   Loggretention      30 mot 90 d  — mindre loggdata att betala för
 //   Köskalning         av           — färre rörliga delar när man felsöker
 //   Larm               av           — ingen mejlar driftjouren om dev
