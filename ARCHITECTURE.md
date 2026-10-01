@@ -45,7 +45,7 @@ Byggt av Can "Knight" Öz, .NET Cloud Developer, ITHS Göteborg.
    │  · queue: jobs        │      └──────────────────────────┘
    └──────────────────────┘
              ▲
-             │  Managed Identity (ingen nyckel någonstans)
+             │  Managed Identity (Storage, ACR, Key Vault)
              │
    ┌──────────────────────┐
    │  Entra ID            │
@@ -120,7 +120,9 @@ Kön ger tre saker till på köpet:
   trafik. Utan det skulle appen skala ner direkt efter uppladdningarna — mitt i
   analysen — eftersom HTTP-trafiken då är noll.
 - **Ett larm som betyder något.** Växer kön ligger analysen efter. Det är en sak
-  driftjouren faktiskt vill bli väckt av, till skillnad från CPU-procent.
+  driftjouren faktiskt vill bli väckt av, till skillnad från CPU-procent. Larmet
+  finns i `main.bicep`, men kursprenumerationens policy nekar alla larmtyper, så det
+  är avstängt i den deployade miljön (tom `alertEmail`).
 
 Priset vi betalar är att API:et blir *eventually consistent*: mellan uppladdning och
 resultat finns några sekunder då inspektionen har status `Queued`. Vi hanterar det
@@ -255,13 +257,13 @@ för resursnamnen — det ger ett deterministiskt suffix, inte ett slumpmässigt
 
 **Hur hanterar vi hemligheter och credentials?**
 
-Den korta versionen: vi har inga. Det är ett medvetet mål, inte en slump. Genomgången
-resurs för resurs:
+Den korta versionen: vi har en enda, och den ligger i Key Vault. Målet var noll, och
+för allt utom Computer Vision har vi nått det. Genomgången resurs för resurs:
 
 | Vad som normalt är en hemlighet | Vad vi gör i stället |
 |---|---|
 | Storage connection string | Managed identity + rollen Storage Blob/Queue Data Contributor |
-| Computer Vision-nyckel | Managed identity + rollen Cognitive Services User |
+| Computer Vision-nyckel | Nyckeln ligger i Key Vault. Container App:en hämtar den med sin managed identity — se nedan |
 | ACR admin-lösenord | Managed identity + rollen AcrPull. `adminUserEnabled: false` i Bicep |
 | Service principal-secret i pipelinen | Service connection i Azure DevOps (hanteras av plattformen) |
 
@@ -281,6 +283,22 @@ De värden som faktiskt sätts som miljövariabler — `Vision__Endpoint`,
 dem utan att kunna använda dem, precis som en postadress inte är samma sak som en
 husnyckel. Application Insights connection string lägger vi ändå som en Container
 Apps-secret, mest för att den inte ska ligga i klartext i portalens miljövariabellista.
+
+**Varför Computer Vision ändå kräver en nyckel**
+
+Planen var managed identity även mot Computer Vision. Det fungerade inte: anropet
+svarade *"Token tenant … does not match resource tenant"*. Kursens Vision-resurs
+ligger i en annan Entra-tenant än vår prenumeration, och en managed identity kan bara
+få tokens i sin egen tenant. Ingen rolltilldelning kan lösa det.
+
+Vi valde därför den näst bästa lösningen. Nyckeln ligger som hemligheten
+`vision-api-key` i ett Key Vault, och Container App:en refererar till den med
+`keyVaultUrl` och vår managed identity. Plattformen hämtar värdet och lägger det i
+miljövariabeln `Vision__ApiKey`; koden skickar det som `Ocp-Apim-Subscription-Key`.
+Nyckeln finns alltså aldrig i koden, i git, i Bicep-mallen eller i pipelinen, och
+appens identitet får bara *läsa* hemligheter (åtkomstpolicy `get`). Roteras nyckeln
+byts den på ett ställe. Ligger Vision-resursen i samma tenant räcker det att lämna
+`visionKeyFromKeyVault = false`, så används managed identity som tidigare.
 
 **Varför user-assigned identity och inte system-assigned?**
 
@@ -337,6 +355,7 @@ region Sweden Central. Växelkurs **1 USD = 10,50 SEK**. Siffrorna avrundas till
 | Blob Storage Hot LRS | 0,0184 USD/GB/mån |
 | Container Registry Basic | ca 5 USD/mån |
 | Log Analytics | 2,76 USD/GB, första 5 GB/mån gratis |
+| Key Vault Standard | 0,03 USD per 10 000 hemlighetsoperationer |
 
 > **Den viktigaste raden i hela kalkylen:** Azure debiterar **en transaktion per feature**,
 > inte per bild. Vi begär `tags,objects,people` — alltså **tre transaktioner per bild**.
@@ -357,6 +376,7 @@ region Sweden Central. Växelkurs **1 USD = 10,50 SEK**. Siffrorna avrundas till
 | **Blob Storage** (ca 88 GB efter halvår + skrivningar) | 1,73 | **18 kr** | 4 % |
 | Egress | 0,50 | 5 kr | 1 % |
 | Log Analytics (under gratisgränsen) | 0,00 | 0 kr | 0 % |
+| Key Vault (en hemlighet, läses vid revisionsstart och var 30:e min) | 0,00 | 0 kr | 0 % |
 | **Summa** | **48,50** | **509 kr/mån** | |
 
 **Intäkt:** 100 × 1 499 = **149 900 kr/mån**.

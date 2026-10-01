@@ -92,8 +92,22 @@ docker run -p 8080:8080 \
 
 ### 1. Infrastruktur
 
-Fyll först i `visionEndpoint` i parameterfilen — endpointen till den Computer
-Vision-resurs kursansvarig har skapat.
+`visionEndpoint` i `main.prod.bicepparam` pekar på kursens Computer Vision-resurs.
+Den ligger i en annan Entra-tenant, så nyckeln hämtas från Key Vault (se
+`ARCHITECTURE.md` → Säkerhet). Första gången, innan `visionKeyFromKeyVault` kan vara
+`true`, måste hemligheten finnas i valvet:
+
+```bash
+# 1. Skapa valvet utan nyckelreferens
+az deployment group create -g <rg> -f infra/main.bicep \
+  -p infra/main.prod.bicepparam -p visionKeyFromKeyVault=false
+
+# 2. Lägg in nyckeln (frågar efter värdet, hamnar inte i shell-historiken)
+read -rs "VK?Vision-nyckel: " && az keyvault secret set \
+  --vault-name <keyVaultName från utdatan> --name vision-api-key --value "$VK"; unset VK
+
+# 3. Deploya igen med parameterfilens värden
+```
 
 ```bash
 # Se vad som skulle hända, utan att ändra något
@@ -193,6 +207,7 @@ Allt sätts som miljövariabler. Dubbla understreck blir punkt i .NET-konfigurat
 | `Vision__Endpoint` | — | Computer Vision-endpoint. Tomt = fejkad analys |
 | `Vision__Features` | `tags,objects,people` | **En transaktion debiteras per feature** |
 | `Vision__UseFake` | `false` | Tvinga fejkad analys |
+| `Vision__ApiKey` | — | Bara när Vision ligger i en annan tenant. Sätts av Container Apps från Key Vault, aldrig i kod. Tom = managed identity |
 | `Vision__MaxRetries` | `3` | Omförsök vid 429 och 5xx |
 | `Worker__Enabled` | `true` | Kör bakgrundsanalysen i den här instansen |
 | `Worker__MaxConcurrentAnalyses` | `3` | Samtidiga Computer Vision-anrop per replica |
@@ -202,8 +217,10 @@ Allt sätts som miljövariabler. Dubbla understreck blir punkt i .NET-konfigurat
 | `Api__MaxImageSizeMb` | `20` | Största bildstorlek |
 | `Azure__ManagedIdentityClientId` | — | Sätts av Bicep. Pekar ut rätt identitet |
 
-**Inga hemligheter finns i listan.** Autentiseringen sköts av managed identity — se
-avsnittet Säkerhet i `ARCHITECTURE.md`.
+**Ingen hemlighet har ett värde i koden eller i git.** Den enda hemligheten,
+`Vision__ApiKey`, är en referens till Key Vault som löses upp med managed identity. All
+annan autentisering sköts direkt av managed identity — se avsnittet Säkerhet i
+`ARCHITECTURE.md`.
 
 ---
 
@@ -263,7 +280,7 @@ utan en ny deploy.
 | `.WithTags()` och `.Produces<T>()` på alla | `Endpoints/` |
 | Computer Vision anropas korrekt | `AzureVisionAnalyzer.cs` |
 | Strukturerat svar | `Models/Inspection.cs` |
-| Managed Identity, ingen nyckel i kod eller historik | `Program.cs`, `main.bicep` |
+| Managed Identity, ingen nyckel i kod eller historik | `Program.cs`, `main.bicep`. Storage och ACR direkt via managed identity; Vision-nyckeln i Key Vault, hämtad med managed identity (Vision ligger i annan tenant) |
 | Resultat i Blob Storage, ett dokument per post | `BlobInspectionStore.cs` |
 | Bicep till befintlig resursgrupp | `infra/main.bicep` (`targetScope = 'resourceGroup'`) |
 | ACR + Container Apps Environment + Container App + Storage | `infra/main.bicep` |
@@ -278,17 +295,17 @@ utan en ny deploy.
 | Ekonomianalys med faktiska siffror | `ARCHITECTURE.md` → Ekonomi |
 | Teknisk reflektion | `ARCHITECTURE.md` |
 | Kundrapport | `RAPPORT.md` |
-| Individuell reflektion | `REFLEKTION_Can_Oz.md` |
+| Individuell reflektion | `REFLEKTION_*.md`, en per person |
 </details>
 
 <details>
-<summary><b>VG-krav (minst tre krävs — här finns sex)</b></summary>
+<summary><b>VG-krav (minst tre krävs — här finns fem, plus larm som kurspolicyn stoppar)</b></summary>
 
 | Krav | Var |
 |---|---|
 | **Autoskalning** | Två regler i `main.bicep`: HTTP vid >10 samtidiga requests, samt köbaserad KEDA-skalning på 20 meddelanden per replica |
-| **Monitoring med custom alert** | Application Insights + Log Analytics. Två larm: >5 serverfel på 5 min, och >200 meddelanden i kön |
-| **Parametriserad Bicep dev/prod** | `main.dev.bicepparam` mot `main.prod.bicepparam` — replicas, CPU, minne, storage-redundans, loggretention, köskalning, larm |
+| **Monitoring med custom alert** | Application Insights + Log Analytics är deployade. Två larm finns i `main.bicep` (>5 serverfel på 5 min, >200 meddelanden i kön), men kursprenumerationens policy nekar alla larmtyper, så de är avstängda i prod |
+| **Parametriserad Bicep dev/prod** | `main.dev.bicepparam` mot `main.prod.bicepparam` — replicas, CPU, minne, loggretention, köskalning |
 | **Felhantering mot Azure-tjänsten** | `AzureVisionAnalyzer.MapError()` översätter 429/401/400/5xx till rätt HTTP-status med förklarande text, loggar upstream-koden, och gör omförsök med backoff |
 | **Rollback** | `docs/ROLLBACK.md` — dokumenterad och demonstrerbar via Container Apps-revisioner |
 | **Välgrundade designval** | `ARCHITECTURE.md` → Designval vi övervägde och valde bort: Container Apps mot App Service mot AKS, kö mot synkront, blob mot databas, REST mot SDK |
