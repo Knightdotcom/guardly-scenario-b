@@ -1,7 +1,8 @@
 # Presentationsupplägg — 10 minuter, Can Öz och Jakob El Saidi
 
-Redovisning fredag 3 oktober. Upplägget nedan är ett **talmanus, inte en slide-mall** —
-det viktiga är ordningen, vem som pratar och de siffror ni ska ha i huvudet.
+Redovisning fredag 3 oktober. Det här är talmanuset till presentationen
+`Guardly_Presentation.pptx` (15 bilder). Varje bild har en etikett med vem som pratar,
+och samma manus ligger som anteckningar i presentatörsvyn.
 
 **Grundregel:** kör demot live om nätet håller, men **spela in en skärminspelning som
 backup kvällen innan**. Ett demo som hänger äter fyra minuter av tio.
@@ -28,19 +29,20 @@ av det mot kraven. Prod-deployen felsökte ni tillsammans.
 
 ## Tidsplan
 
-| Min | Vem | Vad | Poäng ni ska landa |
-|---:|---|---|---|
-| 0–1 | Can | Problemet och lösningen | Tre ingenjörer i ett Google Sheet hinner inte |
-| 1–2 | Can | Arkitekturskiss | Kön är det intressanta valet |
-| 2–5 | Jakob | **Live-demo** | Det fungerar på riktigt, och vi vet var det brister |
-| 5–6 | Jakob | Pipeline, Key Vault och rollback | Grön pipeline = live app, ingen nyckel i git |
-| 6–8 | Can | **Ekonomi** | Siffrorna — Container Apps dyrast, inte AI:n |
-| 8–9 | Can | Designval | Varför Container Apps och inte App Service/AKS |
-| 9–10 | Jakob | Vad vi skulle göra härnäst | Ärlighet om luckorna |
+| Tid | Bild | Vem | Vad | Poäng ni ska landa |
+|---|---:|---|---|---|
+| 0:00–0:45 | 1–2 | Can | Titel, problemet och lösningen | Tre ingenjörer i ett Google Sheet hinner inte |
+| 0:45–1:15 | 3 | Båda | Vem gjorde vad | Tydlig arbetsfördelning |
+| 1:15–2:15 | 4–5 | Can | Arkitektur och varför en kö | Kön är det intressanta valet |
+| 2:15–3:15 | 6–7 | Jakob, sedan Can | Kravuppfyllnad, Bicep och felhantering | Alla G-krav, fem VG-krav |
+| 3:15–5:45 | 8 | Jakob | **Live-demo** | Det fungerar på riktigt, och vi vet var det brister |
+| 5:45–6:30 | 9 | Jakob | Pipeline, Key Vault och rollback | Grön pipeline = live app, ingen nyckel i git |
+| 6:30–8:00 | 10–11 | Can | **Ekonomi** och skalning | Container Apps dyrast, inte AI:n |
+| 8:00–8:45 | 12 | Can | Designval | Varför Container Apps och inte App Service/AKS |
+| 8:45–9:15 | 13 | Båda | Lärdomar från driftsättningen | Det vi lärde oss på riktigt |
+| 9:15–10:00 | 14–15 | Jakob | Härnäst, tack och frågor | Ärlighet om luckorna |
 
----
-
-## 0–1 min: Problemet (Can)
+## Bild 1–2: Problemet och lösningen (Can)
 
 > "Guardly säljer säkerhetsinspektion som tjänst. I dag sitter tre ingenjörer och
 > granskar byggplatsfoton manuellt i ett Google Sheet åt tolv kunder, och de hinner
@@ -54,9 +56,15 @@ av det mot kraven. Prod-deployen felsökte ni tillsammans.
 Säg tidigt att systemet är ett **stöd**, inte en ersättning. Det visar omdöme och ni
 slipper frågan sedan.
 
-## 1–2 min: Arkitektur (Can)
+## Bild 3: Vem gjorde vad (båda)
 
-Visa skissen från `ARCHITECTURE.md`. Säg de fyra delarna på tjugo sekunder, och lägg
+Var och en säger en mening om sin kolumn. Can: "Jag byggde systemet — API, regelmotor,
+kö, Bicep och pipeline." Jakob: "Jag fick det att fungera i kursens miljö och stämde av
+allt mot kraven." Avsluta med att prod-deployen felsöktes tillsammans.
+
+## Bild 4–5: Arkitektur och varför en kö (Can)
+
+Visa arkitekturbilden. Säg de fyra delarna på tjugo sekunder, och lägg
 sedan all tid på kön:
 
 > "Den intressanta delen är kön i mitten. Min första skiss lät uppladdningen anropa
@@ -69,7 +77,26 @@ sedan all tid på kön:
 > meddelande. Den kan inte få 429 från Computer Vision, för den pratar aldrig med
 > Computer Vision."
 
-## 2–5 min: Demo (Jakob, Can sköter skärmen)
+## Bild 6: Kravuppfyllnad (Jakob)
+
+> "Jag gick igenom repot mot G- och VG-listan. Alla G-krav är uppfyllda. Av VG-kraven
+> har vi fem: autoskalning, parametriserad Bicep, felhantering mot Azure, rollback och
+> välgrundade designval — minst tre krävs. Monitoring är byggt: Application Insights är
+> driftsatt och två larm finns i Bicep, men kursprenumerationens policy nekar alla
+> larmtyper."
+
+## Bild 7: Infrastruktur och felhantering (Jakob, sedan Can)
+
+Jakob: "Samma Bicep-mall för dev och prod — skillnaderna ligger i parameterfilerna:
+repliker, CPU, loggtid och köskalning. what-if fångade kursens policyfel innan de nådde
+drift."
+
+Can: "MapError i AzureVisionAnalyzer översätter Computer Visions svar. 429 och 5xx är
+tillfälliga och försöks igen med exponentiell backoff. 401/403 blir 502 med en
+förklaring. Efter fem körningar från kön markeras inspektionen som Failed med en text
+platschefen kan läsa, aldrig en rå Azure-felkod."
+
+## Bild 8: Demo (Jakob, Can sköter skärmen)
 
 Ha allt förberett i separata terminalflikar **innan** ni delar skärm.
 
@@ -88,7 +115,7 @@ Var ärliga om bildanalysen i stället för att hoppas att ingen ser det:
 
 Om något strular: byt till inspelningen utan att be om ursäkt i trettio sekunder.
 
-## 5–6 min: Pipeline, Key Vault och rollback (Jakob)
+## Bild 9: Pipeline, Key Vault och rollback (Jakob)
 
 Visa en grön pipelinekörning i Azure DevOps.
 
@@ -104,12 +131,14 @@ Key Vault på trettio sekunder:
 > not match resource tenant'. Jag lade nyckeln i Key Vault, och appen hämtar den med sin
 > managed identity. Nyckeln finns aldrig i kod, mall eller git."
 
-Demonstrera rollback om ni hinner — `az containerapp ingress traffic set` tar femton
-sekunder. Manus finns i `docs/ROLLBACK.md`. **Obs:** revision `--0000010` har kod från
-före Key Vault, så bildanalysen fungerar inte där. Kontrollera att den är aktiv innan,
-och växla tillbaka till den senaste revisionen direkt efter demot.
+Demonstrera rollback om ni hinner. Appen kör i **Single revision mode**, så bara en
+revision är aktiv åt gången och `az containerapp ingress traffic set` fungerar inte.
+Rollback görs genom att deploya föregående image-tagg med
+`az containerapp update --image …/guardly-api:<föregående tagg>`, vilket tar ungefär en
+minut. Manus finns i `docs/ROLLBACK.md`. Kontrollera aktuell och föregående tagg samma
+dag, och rulla framåt till den senaste taggen direkt efter demot.
 
-## 6–8 min: Ekonomi (Can)
+## Bild 10–11: Ekonomi och skalning (Can)
 
 Ha de här sex siffrorna utantill:
 
@@ -120,7 +149,7 @@ Ha de här sex siffrorna utantill:
 | Dyrast vid lansering | **Container Apps, 244 kr** — inte AI-tjänsten |
 | Dyrast vid tillväxt | **Computer Vision, 567 kr** |
 | 500 bilder på 5 min | **16 kr**, kön tom efter ca 2,5 min |
-| Taket | ca **12 000 bilder/timme** — de gör 200 om dagen |
+| Taket | ca **12 000 bilder/timme** — vid lansering väntas 200 om dagen |
 
 > "Det som överraskade mig var att Container Apps var dyrast vid lansering, inte
 > AI-tjänsten. Två replicas dygnet runt är 5,2 miljoner replica-sekunder i månaden.
@@ -135,30 +164,37 @@ Avsluta med affärsrisken:
 
 > "Den enda verkliga ekonomiska risken sitter inte i tekniken utan i avtalet.
 > 'Obegränsat antal bilder' för 1 499 kr betyder att en kund med en automatisk kamera
-> kan göra sitt eget abonnemang olönsamt vid ungefär 48 000 bilder i månaden. Vår
+> kan göra sitt eget abonnemang olönsamt vid ungefär 48 000 bilder per arbetsplats och månad. Vår
 > rekommendation är en rimlighetsgräns på 2 000 bilder — där är marginalen fortfarande
 > 96 % och ingen ärlig kund kommer i närheten."
 
-## 8–9 min: Designval (Can)
+## Bild 12: Designval (Can)
 
 Välj **ett** och gå på djupet — bättre än att nämna fyra ytligt.
 
 > "Det jämnaste valet var Container Apps mot App Service. App Service hade fungerat och
-> är enklare att komma igång med. Jag valde Container Apps av ett skäl: App Service
-> skalar på CPU och minne, och det säger ingenting om vår last. Vår last är antal bilder
-> som väntar på analys. Container Apps kör KEDA och kan skala på kölängd direkt. Utan
-> det hade appen skalat ner mitt i analysen, eftersom HTTP-trafiken då är noll."
+> är enklare att komma igång med. Vår last är antal bilder som väntar på analys, inte
+> HTTP-trafik. App Service kan också skala på kölängd via Azure Monitor-autoskalning,
+> men då i hela instanser i en App Service-plan som kostar även när inget händer.
+> Container Apps har KEDA inbyggt: regeln på kölängd sitter direkt på appen, skalar per
+> replika och kräver ingen separat plan."
 
 Har ni AKS-frågan kvar: "Vi har ingen som kan drifta Kubernetes och vi behöver inget som
 bara Kubernetes ger. AKS blir aktuellt om Guardly behöver GPU-noder för egna modeller
 eller om en kund kräver drift i sitt eget datacenter."
 
-## 9–10 min: Härnäst (Jakob)
+## Bild 13: Lärdomar från driftsättningen (båda)
 
-> "Tre saker vi inte hann. API:et saknar autentisering, och byggplatsfoton är
+Can tar Bicep och önskat läge (`Vision__UseFake` som försvann vid nästa deploy). Jakob
+tar tenant-gränsen (`/health/ready` sa `true` fast anropet inte fungerade) och att
+Computer Vision inte känner igen hjälmar. Miljöns policyer räcker med en mening.
+
+## Bild 14–15: Härnäst, tack och frågor (Jakob)
+
+> "Fyra saker inför lansering. API:et saknar autentisering, och byggplatsfoton är
 > personuppgifter — det måste göras före lansering. Larmen finns i Bicep men
 > kursprenumerationens policy nekar dem; i Guardlys egen prenumeration är det en
-> parameter. Och den stora möjligheten: Guardlys ingenjörer sitter på flera års manuellt
+> parameter. Ett tak på 2 000 bilder per arbetsplats i avtalet skyddar marginalen. Och den stora möjligheten: Guardlys ingenjörer sitter på flera års manuellt
 > granskade bilder i sitt Google Sheet. Det är exakt träningsmaterialet för en modell som
 > faktiskt känner igen hjälm och väst. Kalkylbladet är inte flaskhalsen — det är deras
 > värdefullaste tillgång."
@@ -222,7 +258,7 @@ identiteten nyckeln från Key Vault (`visionKeyFromKeyVault` i prod); i samma te
 - [ ] Skärminspelning av demot som backup
 - [ ] Terminalflikar förberedda med kommandona inklistrade
 - [ ] Pipeline visar en grön körning
-- [ ] Rollback-revisionen kontrollerad (se 5–6 min)
+- [ ] Aktuell och föregående image-tagg kontrollerade för rollback (se 5–6 min)
 - [ ] Båda har gått igenom vem som säger vad och kört tidsplanen en gång
 - [ ] De sex ekonomisiffrorna utantill
 - [ ] Repo-länken skickad till Marcus (deadline torsdag 2 okt 23:59)
