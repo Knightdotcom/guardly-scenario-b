@@ -547,13 +547,24 @@ resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = if (!empty(a
   }
 }
 
-// Larm 1: mer än 5 % serverfel under 5 minuter.
+// Larm 1: ANTAL serverfel, inte andel.
+//
+// Vi mäter medvetet antal (fler än 5 stycken 5xx på fem minuter) och inte procent.
+// Skälet är vår trafikprofil: vid 200 bilder om dagen kan fem minuter innehålla
+// en enda request. Ett procentlarm hade då larmat vid 100 % felfrekvens på ett
+// enda fel — larmet hade tjutit konstant utan att något var fel. Ett absolut tal
+// är rätt mått vid låg volym.
+//
+// En riktig procentsats kräver en scheduledQueryRule som räknar
+// countif(success == false) * 100.0 / count() över requests-tabellen i
+// Application Insights. Det är rätt väg när volymen vuxit — tröskeln bör då vara
+// 5 % med minst 20 requests i fönstret, så att en enstaka 500:a inte larmar.
 resource failureRateAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (!empty(alertEmail)) {
   name: 'alert-${namePrefix}-${environment}-5xx'
   location: 'global'
   tags: tags
   properties: {
-    description: 'Fler än 5 serverfel (HTTP 5xx) på fem minuter i Guardlys API. Kolla Application Insights innan kund hör av sig.'
+    description: 'Fler än 5 serverfel (HTTP 5xx) på fem minuter i Guardlys API. Absolut tal och inte procent — vid vår låga volym hade ett procentlarm larmat på ett enda fel. Kolla Application Insights innan kund hör av sig.'
     severity: 2
     enabled: true
     scopes: [ containerApp.id ]

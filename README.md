@@ -7,6 +7,7 @@ Scenario B — .NET Cloud Developer, ITHS Göteborg. Byggt av Can "Knight" Öz.
 
 | Dokument | Innehåll |
 |---|---|
+| [`docs/NU.md`](docs/NU.md) | **Körordning: pusha, deploya, verifiera** — börja här |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Tekniska val, ekonomianalys, reflektionsfrågorna |
 | [`RAPPORT.md`](RAPPORT.md) | Kundrapport till Guardly AB |
 | [`REFLEKTION_Can_Oz.md`](REFLEKTION_Can_Oz.md) | Individuell reflektion |

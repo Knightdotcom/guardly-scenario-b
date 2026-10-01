@@ -65,3 +65,10 @@ infra/*.json
 *.log
 tmp/
 temp/
+
+# -----------------------------------------------------------------------------
+# Lokala filer från scripts/go.sh — riktiga värden och bevis, aldrig i git
+# -----------------------------------------------------------------------------
+scripts/guardly.env
+scripts/.*
+infra/main.local.bicepparam

@@ -3,7 +3,7 @@
 //
 // Dev är byggd för att vara billig och snabb att riva. Skillnaderna mot prod:
 //
-//   minReplicas        1 mot 2      — dev behöver ingen redundans
+//   minReplicas        2 i båda      — kravet gäller alla miljöer, inte bara prod
 //   maxReplicas        3 mot 10     — taket skyddar budgeten
 //   CPU/minne          0.25/0.5Gi   — halva prods storlek
 //   Storage-redundans  LRS mot ZRS  — sätts i main.bicep utifrån environment
@@ -30,7 +30,7 @@ param visionAccountName = ''
 // Tre features = tre debiterade transaktioner per bild. I dev räcker taggar.
 param visionFeatures = 'tags,objects,people'
 
-param minReplicas = 1
+param minReplicas = 2
 param maxReplicas = 3
 param containerCpu = '0.25'
 param containerMemory = '0.5Gi'
