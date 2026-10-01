@@ -39,6 +39,9 @@ param visionAccountName string = ''
 @description('Vilka Computer Vision-features vi begär. OBS: Azure debiterar en transaktion per feature.')
 param visionFeatures string = 'tags,objects,people'
 
+@description('true = appen kör FakeVisionAnalyzer i stället för att anropa Computer Vision. Används i kursprenumerationen där vi saknar roll på kursansvarigs Vision-resurs.')
+param visionUseFake bool = false
+
 @description('Sätt till false om ditt konto saknar behörighet att skapa rolltilldelningar. Då måste en admin tilldela rollerna manuellt — se ARCHITECTURE.md.')
 param assignRoles bool = true
 
@@ -465,6 +468,10 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
             {
               name: 'Vision__Features'
               value: visionFeatures
+            }
+            {
+              name: 'Vision__UseFake'
+              value: string(visionUseFake)
             }
             {
               // Talar om för DefaultAzureCredential vilken av maskinens
