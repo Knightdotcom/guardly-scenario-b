@@ -30,8 +30,8 @@ pr:
 variables:
   # -- Ändra de här tre till era egna värden --------------------------------
   azureServiceConnection: 'sc-iths-azure'      # namnet på service connection i Azure DevOps
-  resourceGroup: 'rg-iths-delad'               # den befintliga, delade resursgruppen
-  acrName: 'acrguardlyXXXXXX'                  # output 'acrName' från Bicep-deployen
+  resourceGroup: 'RG-Can-Oz-97d5c9-DotNetCloudDeveloper-VT-Mars-Goteborg'
+  acrName: 'acrguardlyq2xi25'
   containerAppName: 'ca-guardly-api-prod'      # output 'containerAppName' från Bicep-deployen
   # -------------------------------------------------------------------------
 
