@@ -16,7 +16,7 @@ behörigheter och felet där Bicep skrev över appens konfiguration.
 ## 2. Det svåraste momentet
 
 Analyserna fastnade i `Processing` efter en deploy som hade gått grönt. Under felsökningen
-hade jag satt `Vision__UseFake` med `az containerapp update`. Nästa Bicep-deploy skrev över
+hade `Vision__UseFake` satts med `az containerapp update`. Nästa Bicep-deploy skrev över
 appens hela konfiguration och tog bort flaggan, utan något felmeddelande. Jag letade först
 i workern och i Vision-anropet, eftersom det var där symptomet syntes. Det som löste det
 var att jämföra revisionens miljövariabler före och efter deployen. Jag lade in flaggan
