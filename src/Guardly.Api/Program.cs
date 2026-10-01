@@ -169,6 +169,9 @@ builder.Services.AddSwaggerGen(options =>
     {
         options.IncludeXmlComments(xmlPath);
     }
+
+    // Formulärfälten för POST /inspections — se filtret för varför.
+    options.OperationFilter<InspectionUploadOperationFilter>();
 });
 
 var app = builder.Build();
