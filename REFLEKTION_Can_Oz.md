@@ -1,5 +1,7 @@
 # Individuell reflektion — Can Öz
 
+Scenario B, Guardly AB.
+
 ## 1. Min roll i teamet
 
 Jag byggde grunden: API:et i .NET 8, regelmotorn med tester i `SafetyRuleEngineTests.cs`,
